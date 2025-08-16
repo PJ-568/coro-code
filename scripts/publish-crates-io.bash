@@ -16,10 +16,10 @@ if [ $(echo ${LANG/_/-} | grep -Ei "\\b(zh|cn)\\b") ]; then CURRENT_LANG=1;  fi
 recho() {
   if [ "$CURRENT_LANG" == "1" ]; then
     ## zh-Hans-CN
-    echo "$1"
+    echo -e "$1"
   else
     ## en-US
-    echo "$2"
+    echo -e "$2"
   fi
 }
 
