@@ -35,79 +35,81 @@ if (-not (Test-Path ".git/hooks")) {
     New-Item -ItemType Directory -Path ".git/hooks" -Force | Out-Null
 }
 
-# Pre-commit hook content (PowerShell version for Windows)
+# Pre-commit hook content (Windows batch version)
 $PreCommitHookContent = @'
-#!/bin/bash
+@echo off
+setlocal enabledelayedexpansion
 
-# Colors for output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-NC='\033[0m' # No Color
+:: ANSI color codes for Windows 10+ Command Prompt
+set "RED=[91m"
+set "GREEN=[92m"
+set "YELLOW=[93m"
+set "BLUE=[94m"
+set "CYAN=[96m"
+set "NC=[0m"
 
-log_info() {
-    echo -e "${CYAN}[INFO]${NC} $1"
-}
+echo %CYAN%[INFO]%NC% Running pre-commit checks...
 
-log_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
-}
+:: Check if cargo is available
+where cargo >nul 2>&1
+if !errorlevel! neq 0 (
+    echo %RED%[ERROR]%NC% Cargo is not installed or not in PATH
+    exit /b 1
+)
 
-log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
+:: Run cargo fmt check
+echo %CYAN%[INFO]%NC% Checking code formatting with cargo fmt...
+cargo fmt --all -- --check >nul 2>&1
+if !errorlevel! neq 0 (
+    echo %RED%[ERROR]%NC% Code formatting check failed. Please run 'cargo fmt' to fix formatting issues.
+    exit /b 1
+)
+echo %GREEN%[SUCCESS]%NC% Code formatting check passed
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
+:: Run cargo clippy
+echo %CYAN%[INFO]%NC% Running cargo clippy...
+cargo clippy --all-targets --all-features -- -D warnings -A dead_code >nul 2>&1
+if !errorlevel! neq 0 (
+    echo %RED%[ERROR]%NC% Clippy check failed. Please fix the warnings and errors.
+    exit /b 1
+)
+echo %GREEN%[SUCCESS]%NC% Clippy check passed
 
-log_info "Running pre-commit checks..."
+:: Run tests
+echo %CYAN%[INFO]%NC% Running tests...
+cargo test >nul 2>&1
+if !errorlevel! neq 0 (
+    echo %RED%[ERROR]%NC% Tests failed. Please fix the failing tests.
+    exit /b 1
+)
+echo %GREEN%[SUCCESS]%NC% All tests passed
 
-# Check if cargo is available
-if ! command -v cargo &> /dev/null; then
-    log_error "Cargo is not installed or not in PATH"
-    exit 1
-fi
-
-# Run cargo fmt check
-log_info "Checking code formatting with cargo fmt..."
-if ! cargo fmt --all -- --check; then
-    log_error "Code formatting check failed. Please run 'cargo fmt' to fix formatting issues."
-    exit 1
-fi
-log_success "Code formatting check passed"
-
-# Run cargo clippy
-log_info "Running cargo clippy..."
-if ! cargo clippy --all-targets --all-features -- -D warnings -A dead_code; then
-    log_error "Clippy check failed. Please fix the warnings and errors."
-    exit 1
-fi
-log_success "Clippy check passed"
-
-# Run tests
-log_info "Running tests..."
-if ! cargo test; then
-    log_error "Tests failed. Please fix the failing tests."
-    exit 1
-fi
-log_success "All tests passed"
-
-log_success "All pre-commit checks passed!"
+echo %GREEN%[SUCCESS]%NC% All pre-commit checks passed!
 '@
 
-# Write the pre-commit hook
+# Write the pre-commit hook (both standard and .cmd versions for Windows compatibility)
 Write-LogInfo "Writing pre-commit hook to .git/hooks/pre-commit..."
-$PreCommitHookContent | Out-File -FilePath ".git/hooks/pre-commit" -Encoding UTF8 -NoNewline
+$PreCommitHookContent | Out-File -FilePath ".git/hooks/pre-commit" -Encoding ASCII
+$PreCommitHookContent | Out-File -FilePath ".git/hooks/pre-commit.cmd" -Encoding ASCII
+
+# Set executable permissions (Windows equivalent)
+try {
+    $acl = Get-Acl ".git/hooks/pre-commit"
+    $accessRule = New-Object System.Security.AccessControl.FileSystemAccessRule("Everyone", "FullControl", "Allow")
+    $acl.SetAccessRule($accessRule)
+    Set-Acl ".git/hooks/pre-commit" $acl
+    Set-Acl ".git/hooks/pre-commit.cmd" $acl
+    Write-LogInfo "Set executable permissions on pre-commit hooks"
+} catch {
+    Write-LogWarning "Could not set executable permissions: $($_.Exception.Message)"
+}
 
 # Verify the installation
-if (Test-Path ".git/hooks/pre-commit") {
+if ((Test-Path ".git/hooks/pre-commit") -and (Test-Path ".git/hooks/pre-commit.cmd")) {
     Write-LogSuccess "Pre-commit hook successfully installed!"
     Write-LogInfo "The hook will run automatically before each commit."
-    Write-LogInfo "To test the hook manually, run: .git/hooks/pre-commit"
-    Write-LogWarning "Note: On Windows, you may need Git Bash or WSL to execute the hook properly."
+    Write-LogInfo "Created both 'pre-commit' and 'pre-commit.cmd' for maximum Windows compatibility."
+    Write-LogInfo "To test the hook manually, run: .git/hooks/pre-commit.cmd"
 } else {
     Write-LogError "Failed to install pre-commit hook"
     exit 1

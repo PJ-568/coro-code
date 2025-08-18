@@ -47,73 +47,80 @@ if not exist ".git\hooks" (
 call :log_info "Writing pre-commit hook to .git/hooks/pre-commit..."
 
 (
-echo #!/bin/bash
+echo @echo off
+echo setlocal enabledelayedexpansion
 echo.
-echo # Colors for output
-echo RED='\033[0;31m'
-echo GREEN='\033[0;32m'
-echo YELLOW='\033[1;33m'
-echo BLUE='\033[0;34m'
-echo CYAN='\033[0;36m'
-echo NC='\033[0m' # No Color
+echo :: ANSI color codes for Windows 10+ Command Prompt
+echo set "RED=[91m"
+echo set "GREEN=[92m"
+echo set "YELLOW=[93m"
+echo set "BLUE=[94m"
+echo set "CYAN=[96m"
+echo set "NC=[0m"
 echo.
-echo log_info^(^) {
-echo     echo -e "${CYAN}[INFO]${NC} $1"
-echo }
+echo echo %%CYAN%%[INFO]%%NC%% Running pre-commit checks...
 echo.
-echo log_success^(^) {
-echo     echo -e "${GREEN}[SUCCESS]${NC} $1"
-echo }
+echo :: Check if cargo is available
+echo where cargo ^>nul 2^>^&1
+echo if ^^!errorlevel^^! neq 0 ^(
+echo     echo %%RED%%[ERROR]%%NC%% Cargo is not installed or not in PATH
+echo     exit /b 1
+echo ^)
 echo.
-echo log_warning^(^) {
-echo     echo -e "${YELLOW}[WARNING]${NC} $1"
-echo }
+echo :: Run cargo fmt check
+echo echo %%CYAN%%[INFO]%%NC%% Checking code formatting with cargo fmt...
+echo cargo fmt --all -- --check ^>nul 2^>^&1
+echo if ^^!errorlevel^^! neq 0 ^(
+echo     echo %%RED%%[ERROR]%%NC%% Code formatting check failed. Please run 'cargo fmt' to fix formatting issues.
+echo     exit /b 1
+echo ^)
+echo echo %%GREEN%%[SUCCESS]%%NC%% Code formatting check passed
 echo.
-echo log_error^(^) {
-echo     echo -e "${RED}[ERROR]${NC} $1"
-echo }
+echo :: Run cargo clippy
+echo echo %%CYAN%%[INFO]%%NC%% Running cargo clippy...
+echo cargo clippy --all-targets --all-features -- -D warnings -A dead_code ^>nul 2^>^&1
+echo if ^^!errorlevel^^! neq 0 ^(
+echo     echo %%RED%%[ERROR]%%NC%% Clippy check failed. Please fix the warnings and errors.
+echo     exit /b 1
+echo ^)
+echo echo %%GREEN%%[SUCCESS]%%NC%% Clippy check passed
 echo.
-echo log_info "Running pre-commit checks..."
+echo :: Run tests
+echo echo %%CYAN%%[INFO]%%NC%% Running tests...
+echo cargo test ^>nul 2^>^&1
+echo if ^^!errorlevel^^! neq 0 ^(
+echo     echo %%RED%%[ERROR]%%NC%% Tests failed. Please fix the failing tests.
+echo     exit /b 1
+echo ^)
+echo echo %%GREEN%%[SUCCESS]%%NC%% All tests passed
 echo.
-echo # Check if cargo is available
-echo if ! command -v cargo ^&^> /dev/null; then
-echo     log_error "Cargo is not installed or not in PATH"
-echo     exit 1
-echo fi
-echo.
-echo # Run cargo fmt check
-echo log_info "Checking code formatting with cargo fmt..."
-echo if ! cargo fmt --all -- --check; then
-echo     log_error "Code formatting check failed. Please run 'cargo fmt' to fix formatting issues."
-echo     exit 1
-echo fi
-echo log_success "Code formatting check passed"
-echo.
-echo # Run cargo clippy
-echo log_info "Running cargo clippy..."
-echo if ! cargo clippy --all-targets --all-features -- -D warnings -A dead_code; then
-echo     log_error "Clippy check failed. Please fix the warnings and errors."
-echo     exit 1
-echo fi
-echo log_success "Clippy check passed"
-echo.
-echo # Run tests
-echo log_info "Running tests..."
-echo if ! cargo test; then
-echo     log_error "Tests failed. Please fix the failing tests."
-echo     exit 1
-echo fi
-echo log_success "All tests passed"
-echo.
-echo log_success "All pre-commit checks passed!"
+echo echo %%GREEN%%[SUCCESS]%%NC%% All pre-commit checks passed!
 ) > ".git\hooks\pre-commit"
+
+:: Also create .cmd version for Windows compatibility
+copy ".git\hooks\pre-commit" ".git\hooks\pre-commit.cmd" >nul
+
+:: Set executable permissions
+call :log_info "Setting executable permissions on pre-commit hooks..."
+icacls ".git\hooks\pre-commit" /grant Everyone:F >nul 2>&1
+icacls ".git\hooks\pre-commit.cmd" /grant Everyone:F >nul 2>&1
+if !errorlevel! equ 0 (
+    call :log_info "Executable permissions set successfully"
+) else (
+    call :log_warning "Could not set executable permissions"
+)
 
 :: Verify the installation
 if exist ".git\hooks\pre-commit" (
-    call :log_success "Pre-commit hook successfully installed!"
-    call :log_info "The hook will run automatically before each commit."
-    call :log_info "To test the hook manually, run: .git/hooks/pre-commit"
-    call :log_warning "Note: On Windows, you may need Git Bash or WSL to execute the hook properly."
+    if exist ".git\hooks\pre-commit.cmd" (
+        call :log_success "Pre-commit hook successfully installed!"
+        call :log_info "The hook will run automatically before each commit."
+        call :log_info "Created both 'pre-commit' and 'pre-commit.cmd' for maximum Windows compatibility."
+        call :log_info "To test the hook manually, run: .git/hooks/pre-commit.cmd"
+    ) else (
+        call :log_error "Failed to create .cmd version of pre-commit hook"
+        exit /b 1
+    )
 ) else (
     call :log_error "Failed to install pre-commit hook"
     exit /b 1
